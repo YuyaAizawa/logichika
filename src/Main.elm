@@ -1,4 +1,4 @@
-module Main exposing (main)
+port module Main exposing (main)
 
 import Browser
 import Canvas exposing (Point, shapes, rect)
@@ -12,10 +12,11 @@ import Json.Decode as Json
 
 
 main =
-  Browser.sandbox
+  Browser.element
     { init = init
     , view = view
     , update = update
+    , subscriptions = subscriptions
     }
 
 
@@ -29,11 +30,14 @@ type alias Model =
   , grabbed : Maybe Point
   }
 
-init : Model
-init =
-  { block = ( 10, 10 )
-  , grabbed = Nothing
-  }
+init : () -> ( Model, Cmd msg )
+init _ =
+  (
+    { block = ( 10, 10 )
+    , grabbed = Nothing
+    }
+  , Cmd.none
+  )
 
 blockSize = 20
 
@@ -46,15 +50,23 @@ blockSize = 20
 type Msg
   = MouseDown MouseState
   | MouseUp MouseState
+  | MouseUpOutsideElm
   | MouseMove MouseState
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+  ( update_ msg model, Cmd.none )
+
+update_ : Msg -> Model -> Model
+update_ msg model =
   case msg of
     MouseDown mouse ->
       { model | grabbed = intoBlock model.block ( mouse.x, mouse.y ) }
 
     MouseUp mouse ->
+      { model | grabbed = Nothing }
+
+    MouseUpOutsideElm ->
       { model | grabbed = Nothing }
 
     MouseMove mouse ->
@@ -105,6 +117,18 @@ view model =
       , renderBlock model.block
       ]
     ]
+
+
+
+-------------------
+-- SUBSCRIPTIONS --
+-------------------
+
+port mouseUp : ( () -> msg ) -> Sub msg
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    mouseUp (\_ -> MouseUpOutsideElm)
 
 
 

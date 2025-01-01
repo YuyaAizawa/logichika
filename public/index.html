@@ -16,6 +16,9 @@
   const app = Elm.Main.init({
     node: document.querySelector("main")
   });
+  window.addEventListener("mouseup", () => {
+    app.ports.mouseUp.send(null);
+});
 </script>
 </body>
 </html>
