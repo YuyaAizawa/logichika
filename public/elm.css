@@ -13,3 +13,7 @@ html, body {
   align-items: center;
   flex-direction: column;
 }
+
+elm-canvas {
+  display: block;
+}

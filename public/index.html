@@ -6,14 +6,16 @@
 <title></title>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <link rel="stylesheet" type="text/css" href="elm.css">
-<script src="js/elm.js"></script>
 </head>
-<body>
-<div id="elm-area"><p>Failed to load elm.js</p></div>
 
+<body>
+<main><p>Failed to load elm.js</p></main>
+<script src="js/elm-canvas.js"></script>
+<script src="js/elm.js"></script>
 <script>
-  const app = document.getElementById("elm-area")
-  Elm.Main.init({ node: app });
+  const app = Elm.Main.init({
+    node: document.querySelector("main")
+  });
 </script>
 </body>
 </html>
