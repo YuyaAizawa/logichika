@@ -1,14 +1,14 @@
 port module Main exposing (main)
 
 import Browser
-import Canvas exposing (Point, shapes, rect)
+import Canvas exposing (Point, Renderable, shapes, rect)
 import Canvas.Settings exposing (fill)
 import Color
-import Html exposing (Attribute, Html, div)
-import Html.Attributes exposing (class, style)
-import Html.Events
+import Dict exposing (Dict)
+import Html exposing (Attribute, Html, div, input, label, text)
+import Html.Attributes as Attr
+import Html.Events exposing (onClick)
 import Json.Decode as Json
-
 
 
 main =
@@ -25,21 +25,35 @@ main =
 -- MODEL --
 -----------
 
+type alias Coords = ( Int, Int )
+
+type Element
+  = Wire
+  | Bridge
+  | Button
+  | Input
+  | And
+  | Nor
+
+type Tool  -- マウスに割当たっている状態，みたいな名前に変える
+  = Drawer Element
+  | Eraser
+
 type alias Model =
-  { block : Point
-  , grabbed : Maybe Point
+  { grid : Dict Coords Element
+  , tool : Tool
+  , zoom : Int
   }
 
 init : () -> ( Model, Cmd msg )
 init _ =
   (
-    { block = ( 10, 10 )
-    , grabbed = Nothing
+    { grid = Dict.empty
+    , tool = Drawer Wire
+    , zoom = 8
     }
   , Cmd.none
   )
-
-blockSize = 20
 
 
 
@@ -48,7 +62,8 @@ blockSize = 20
 ------------
 
 type Msg
-  = MouseDown MouseState
+  = ToolUpdate Tool
+  | MouseDown MouseState
   | MouseUp MouseState
   | MouseUpOutsideElm
   | MouseMove MouseState
@@ -60,32 +75,34 @@ update msg model =
 update_ : Msg -> Model -> Model
 update_ msg model =
   case msg of
+    ToolUpdate tool ->
+      { model | tool = tool }
+
     MouseDown mouse ->
-      { model | grabbed = intoBlock model.block ( mouse.x, mouse.y ) }
+      let
+        target =
+          ( floor mouse.x // model.zoom
+          , floor mouse.y // model.zoom
+          )
+        grid =
+          case model.tool of
+            Drawer element ->
+              model.grid
+                |> Dict.insert target element
+            Eraser ->
+              model.grid
+                |> Dict.remove target
+      in
+        { model | grid = grid }
 
     MouseUp mouse ->
-      { model | grabbed = Nothing }
+      model
 
     MouseUpOutsideElm ->
-      { model | grabbed = Nothing }
+      model
 
     MouseMove mouse ->
-      case model.grabbed of
-        Nothing ->
-          model
-        Just ( x, y ) ->
-          { model | block = ( mouse.x - x, mouse.y - y ) }
-
-intoBlock : Point -> Point -> Maybe Point
-intoBlock ( blockX, blockY ) ( mouseX, mouseY ) =
-  let
-    x = mouseX - blockX
-    y = mouseY - blockY
-  in
-    if 0 <= x && x < blockSize && 0 <= y && y < blockSize then
-      Just ( x, y )
-    else
-      Nothing
+      model
 
 
 
@@ -97,27 +114,72 @@ canvasWidth = 640
 canvasHeight = 480
 
 fillBackGound =
-  shapes [ fill Color.white ] [ rect (0, 0) canvasWidth canvasHeight ]
+  shapes [ fill color.background ] [ rect (0, 0) canvasWidth canvasHeight ]
 
-renderBlock upperLeft =
-  shapes [ fill Color.red ]
-    [ rect upperLeft blockSize blockSize ]
+renderWire ( x, y ) =
+  shapes [ fill color.wireActive ]
+    [ rect ( toFloat x * 8.0, toFloat y * 8.0 ) 8.0 8.0 ]
 
 view : Model -> Html Msg
 view model =
-  div [ class "contents" ]
-    [ Canvas.toHtml (canvasWidth, canvasHeight)
-      [ style "display" "block"
-      , style "border" "1px solid red"
-      , onMouseUp MouseUp
-      , onMouseDown MouseDown
-      , onMouseMove MouseMove
-      ]
-      [ fillBackGound
-      , renderBlock model.block
-      ]
+  div [ Attr.class "contents" ]
+    [ palletView model.tool
+    , blueprintView model
     ]
 
+-- PALLET --
+
+palletView : Tool -> Html Msg
+palletView current =
+  div []
+    [ toolOption "Eraser" Eraser current
+    , toolOption "Wire" (Drawer Wire) current
+    , toolOption "Bridge" (Drawer Bridge) current
+    , toolOption "Button" (Drawer Button) current
+    , toolOption "InputPin" (Drawer Input) current
+    , toolOption "AndGate" (Drawer And) current
+    , toolOption "NorGate" (Drawer Nor) current
+    ]
+
+toolOption : String -> Tool -> Tool -> Html Msg
+toolOption name tool current =
+  div []
+    [ input
+      [ Attr.type_ "radio"
+      , Attr.id name
+      , Attr.checked (tool == current)
+      , onClick <| ToolUpdate tool
+      ] []
+    , label [ Attr.for name ] [ text name ]
+    ]
+
+-- BLUEPRINT --
+
+blueprintView : Model -> Html Msg
+blueprintView model =
+  Canvas.toHtml (canvasWidth, canvasHeight)
+    [ Attr.style "display" "block"
+    , Attr.style "border" "1px solid red"
+    , onMouseUp MouseUp  -- holdしているかどうかで移動か
+    , onMouseDown MouseDown
+    , onMouseMove MouseMove
+    ]
+    (fillBackGound :: (model.grid |> Dict.toList |> List.map (renderGrid model.zoom)))
+
+renderGrid : Int -> ( Coords, Element ) -> Renderable
+renderGrid zoom ( ( x, y ), element ) =
+  let
+    color_ =
+      case element of
+        Wire -> color.wireInactive
+        Bridge -> color.bridgeInactive
+        Button -> color.buttonInactive
+        Input -> color.inputInactive
+        And -> color.andInactive
+        Nor -> color.norInactive
+  in
+    shapes [ fill color_ ]
+      [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
 
 
 -------------------
@@ -169,3 +231,25 @@ onMouseMove msgMapper =
   mouseDecoder
     |> Json.map msgMapper
     |> Html.Events.on "mousemove"
+
+
+
+-----------
+-- COLOR --
+-----------
+
+color =
+  { background     = Color.rgb255   0   0   0
+  , wireActive     = Color.rgb255   0 255 255
+  , wireInactive   = Color.rgb255  64 128 128
+  , bridgeActive   = Color.rgb255  64 192 192
+  , bridgeInactive = Color.rgb255  32  64  64
+  , buttonActive   = Color.rgb255 255 128  32
+  , buttonInactive = Color.rgb255 192  96  32
+  , inputActive    = Color.rgb255 237  28  36
+  , inputInactive  = Color.rgb255 128  28  36
+  , andActive      = Color.rgb255 255 192 255
+  , andInactive    = Color.rgb255 160 128 160
+  , norActive      = Color.rgb255 128 196 128
+  , norInactive    = Color.rgb255  96 128  96
+  }
