@@ -5,9 +5,9 @@ import Canvas exposing (Point, Renderable, shapes, rect)
 import Canvas.Settings exposing (fill)
 import Color
 import Dict exposing (Dict)
-import Html exposing (Attribute, Html, div, input, label, text)
-import Html.Attributes as Attr
-import Html.Events exposing (onClick)
+import Html exposing (Attribute, Html, div, button, input, textarea, label, text)
+import Html.Attributes as Attrs
+import Html.Events as Events
 import Json.Decode as Json
 
 
@@ -25,6 +25,15 @@ main =
 -- MODEL --
 -----------
 
+type alias Model =
+  { grid : Blueprint
+  , tool : Tool
+  , zoom : Int
+  , text : String
+  }
+
+type alias Blueprint = Dict Coords Element
+
 type alias Coords = ( Int, Int )
 
 type Element
@@ -35,15 +44,9 @@ type Element
   | And
   | Nor
 
-type Tool  -- マウスに割当たっている状態，みたいな名前に変える
+type Tool
   = Drawer Element
   | Eraser
-
-type alias Model =
-  { grid : Dict Coords Element
-  , tool : Tool
-  , zoom : Int
-  }
 
 init : () -> ( Model, Cmd msg )
 init _ =
@@ -51,6 +54,7 @@ init _ =
     { grid = Dict.empty
     , tool = Drawer Wire
     , zoom = 8
+    , text = ""
     }
   , Cmd.none
   )
@@ -67,6 +71,9 @@ type Msg
   | MouseUp MouseState
   | MouseUpOutsideElm
   | MouseMove MouseState
+  | UpdateText String
+  | Serialize
+  | Deserialize
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -104,6 +111,15 @@ update_ msg model =
     MouseMove mouse ->
       model
 
+    UpdateText text_ ->
+      { model | text = text_ }
+
+    Serialize ->
+      { model | text = serialize model.grid }
+
+    Deserialize ->
+      { model | grid = deserialize model.text }
+
 
 
 ----------
@@ -122,9 +138,10 @@ renderWire ( x, y ) =
 
 view : Model -> Html Msg
 view model =
-  div [ Attr.class "contents" ]
+  div [ Attrs.class "contents" ]
     [ palletView model.tool
     , blueprintView model
+    , serializeView model.text
     ]
 
 -- PALLET --
@@ -145,12 +162,12 @@ toolOption : String -> Tool -> Tool -> Html Msg
 toolOption name tool current =
   div []
     [ input
-      [ Attr.type_ "radio"
-      , Attr.id name
-      , Attr.checked (tool == current)
-      , onClick <| ToolUpdate tool
+      [ Attrs.type_ "radio"
+      , Attrs.id name
+      , Attrs.checked (tool == current)
+      , Events.onClick <| ToolUpdate tool
       ] []
-    , label [ Attr.for name ] [ text name ]
+    , label [ Attrs.for name ] [ text name ]
     ]
 
 -- BLUEPRINT --
@@ -158,9 +175,9 @@ toolOption name tool current =
 blueprintView : Model -> Html Msg
 blueprintView model =
   Canvas.toHtml (canvasWidth, canvasHeight)
-    [ Attr.style "display" "block"
-    , Attr.style "border" "1px solid red"
-    , onMouseUp MouseUp  -- holdしているかどうかで移動か
+    [ Attrs.style "display" "block"
+    , Attrs.style "border" "1px solid red"
+    , onMouseUp MouseUp
     , onMouseDown MouseDown
     , onMouseMove MouseMove
     ]
@@ -180,6 +197,24 @@ renderGrid zoom ( ( x, y ), element ) =
   in
     shapes [ fill color_ ]
       [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
+
+-- SAVE & LOAD --
+
+serializeView : String -> Html Msg
+serializeView text_ =
+  div []
+    [ textarea
+      [ Events.onInput UpdateText
+      , Attrs.value text_
+      ] []
+    , button
+      [ Events.onClick Serialize ]
+      [ text "Serialize" ]
+    , button
+      [ Events.onClick Deserialize ]
+      [ text "Deserialize" ]
+    ]
+
 
 
 -------------------
@@ -218,19 +253,19 @@ onMouseDown : (MouseState -> msg) -> Attribute msg
 onMouseDown msgMapper =
   mouseDecoder
     |> Json.map msgMapper
-    |> Html.Events.on "mousedown"
+    |> Events.on "mousedown"
 
 onMouseUp : (MouseState -> msg) -> Attribute msg
 onMouseUp msgMapper =
   mouseDecoder
     |> Json.map msgMapper
-    |> Html.Events.on "mouseup"
+    |> Events.on "mouseup"
 
 onMouseMove : (MouseState -> msg) -> Attribute msg
 onMouseMove msgMapper =
   mouseDecoder
     |> Json.map msgMapper
-    |> Html.Events.on "mousemove"
+    |> Events.on "mousemove"
 
 
 
@@ -253,3 +288,78 @@ color =
   , norActive      = Color.rgb255 128 196 128
   , norInactive    = Color.rgb255  96 128  96
   }
+
+
+
+---------------
+-- SERIALIZE --
+---------------
+
+serialize : Blueprint -> String
+serialize blueprint =
+  let
+    coordsList = Dict.keys blueprint
+
+    maxLine =
+      coordsList
+        |> List.map (\( _, y ) -> y)
+        |> List.maximum
+        |> Maybe.withDefault 0
+
+    maxColumn =
+      coordsList
+        |> List.map (\( x, y ) -> x)
+        |> List.maximum
+        |> Maybe.withDefault 0
+  in
+    List.range 0 maxLine
+      |> List.map(\y ->
+        List.range 0 maxColumn
+          |> List.map(\x ->
+            blueprint
+              |> Dict.get ( x, y )
+              |> toChar
+            )
+          |> String.fromList
+      )
+      |> String.join "\n"
+
+deserialize : String -> Blueprint
+deserialize src =
+  src
+    |> String.lines
+    |> List.indexedMap (\line string ->
+      string
+        |> String.toList
+        |> List.indexedMap (\column char ->
+          ( ( column, line ), fromChar char )
+        )
+        |> List.filterMap (\( coords, maybeChar ) ->
+          maybeChar
+            |> Maybe.map(\char -> ( coords, char ))
+        )
+    )
+    |> List.concat
+    |> Dict.fromList
+
+toChar : Maybe Element -> Char
+toChar element =
+  case element of
+    Nothing      -> ' '
+    Just Wire    -> 'w'
+    Just Bridge  -> 'c'
+    Just Button  -> 'b'
+    Just Input   -> 'p'
+    Just And     -> 'a'
+    Just Nor     -> 'n'
+
+fromChar : Char -> Maybe Element
+fromChar char =
+  case char of
+    'w' -> Just Wire
+    'c' -> Just Bridge
+    'b' -> Just Button
+    'p' -> Just Input
+    'a' -> Just And
+    'n' -> Just Nor
+    _   -> Nothing
