@@ -212,8 +212,8 @@ view model =
     tabContents =
       case model.tab of
         EditorTab ->
-          [ palletView model.tool
-          , blueprintView model
+          [ blueprintView model
+          , palletView model.tool
           , serializeView model.text
           ]
 
@@ -242,27 +242,28 @@ ariaSelected bool =
 
 palletView : Tool -> Html Msg
 palletView current =
-  Html.div []
-    [ toolOption "Eraser" Eraser current
-    , toolOption "Wire" (Drawer Wire) current
-    , toolOption "Cross" (Drawer Cross) current
-    , toolOption "Button" (Drawer Button) current
-    , toolOption "InputPin" (Drawer Input) current
-    , toolOption "AndGate" (Drawer And) current
-    , toolOption "NorGate" (Drawer Nor) current
-    ]
-
-toolOption : String -> Tool -> Tool -> Html Msg
-toolOption name tool current =
-  Html.div []
-    [ Html.input
-      [ Attrs.type_ "radio"
-      , Attrs.id name
-      , Attrs.checked (tool == current)
-      , Events.onClick <| ToolUpdate tool
-      ] []
-    , Html.label [ Attrs.for name ] [ Html.text name ]
-    ]
+  let
+    option name color_ tool =
+      Html.button
+        [ Attrs.class "option"
+        , ariaSelected (tool == current)
+        , Events.onClick <| ToolUpdate tool
+        ]
+        [ Html.span
+          [ Attrs.style "color" <| Color.toCssString color_ ]
+          [ Html.text "■ " ]
+        , Html.text name
+        ]
+  in
+    Html.div [ Attrs.class "pallet" ]
+      [ option "Eraser" color.background Eraser
+      , option "Wire" color.wireInactive (Drawer Wire)
+      , option "Cross" color.crossInactive (Drawer Cross)
+      , option "Button" color.buttonInactive (Drawer Button)
+      , option "InputPin" color.inputInactive (Drawer Input)
+      , option "AndGate" color.andInactive (Drawer And)
+      , option "NorGate" color.norInactive (Drawer Nor)
+      ]
 
 -- BLUEPRINT --
 
@@ -270,7 +271,6 @@ blueprintView : Model -> Html Msg
 blueprintView model =
   Canvas.toHtml (canvasWidth, canvasHeight)
     [ Attrs.style "display" "block"
-    , Attrs.style "border" "1px solid red"
     , onMouseUp MouseUp
     , onMouseDown MouseDown
     , onMouseMove MouseMove
