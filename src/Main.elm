@@ -103,6 +103,7 @@ type Msg
   | Tick
   | TabClicked Tab
   | SpeedUpdated Speed
+  | ZoomUpdated Int
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -202,6 +203,9 @@ update_ msg model =
     SpeedUpdated speed ->
       { model | speed = speed }
 
+    ZoomUpdated zoom ->
+      { model | zoom = zoom }
+
 
 
 ----------
@@ -228,12 +232,14 @@ view model =
         EditorTab ->
           [ blueprintView model
           , palletView model.tool
+          , zoomSelectorView model.zoom
           , serializeView model.text
           ]
 
         SimulatorTab ->
           [ simulationView model.zoom model.circuit model.status
-          , speedView model.speed
+          , speedSelectorView model.speed
+          , zoomSelectorView model.zoom
           , Html.button [ Events.onClick Tick ] [ Html.text "Tick" ]
           ]
   in
@@ -270,7 +276,7 @@ palletView current =
         , Html.text name
         ]
   in
-    Html.div [ Attrs.class "pallet" ]
+    Html.div [ Attrs.class "pallet selector" ]
       [ option "Eraser" color.background Eraser
       , option "Wire" color.wireInactive (Drawer Wire)
       , option "Cross" color.crossInactive (Drawer Cross)
@@ -314,6 +320,28 @@ renderGrid : Int -> Coords -> Color -> Renderable
 renderGrid zoom ( x, y ) color_ =
   shapes [ fill color_ ]
     [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
+
+-- ZOOM --
+
+zoomSelectorView : Int -> Html Msg
+zoomSelectorView current =
+  let
+    option name zoom =
+      Html.button
+        [ Attrs.class "option"
+        , ariaSelected (zoom == current)
+        , Events.onClick <| ZoomUpdated zoom
+        ]
+        [ Html.text name ]
+  in
+    Html.div [ Attrs.class "zoom selector" ]
+      [ Html.label [] [ Html.text "Zoom: "]
+      , option "x1" 1
+      , option "x2" 2
+      , option "x4" 4
+      , option "x8" 8
+      , option "x16" 16
+      ]
 
 -- SAVE & LOAD --
 
@@ -408,8 +436,8 @@ simulationView zoom circuit status =
 
 -- SPEED --
 
-speedView : Speed -> Html Msg
-speedView current =
+speedSelectorView : Speed -> Html Msg
+speedSelectorView current =
   let
     option name speed =
       Html.button
@@ -419,7 +447,7 @@ speedView current =
         ]
         [ Html.text name ]
   in
-    Html.div [ Attrs.class "speed" ]
+    Html.div [ Attrs.class "speed selector" ]
       [ Html.label [] [ Html.text "Speed: "]
       , option "⛄" Pose
       , option "🐢" Turtle

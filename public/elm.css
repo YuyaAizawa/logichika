@@ -87,16 +87,7 @@ button.option[aria-selected="true"] {
   }
 }
 
-.pallet {
-  padding: 4px 0;
-  display: flex;
-  gap: 4px;
-  .option {
-    padding: 2px 4px;
-  }
-}
-
-.speed {
+.selector {
   padding: 4px 0;
   display: flex;
   gap: 4px;
