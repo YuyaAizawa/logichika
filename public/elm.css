@@ -2,18 +2,64 @@
   margin: 0;
 }
 
+:root {
+  --base-color: #4C5CAE;
+  --accent-color: #FE6426;
+  --base-muted-color: #DADEEF;
+  --accent-muted-color: #FEC1A8;
+
+  --border-color: #B5C0C0;
+  --border-radius: 0.3rem;
+}
+
 html, body {
   height: 100%;
 }
 
-.contents {
+main {
   height: 100%;
   display: flex;
-  justify-content: center;
   align-items: center;
   flex-direction: column;
+  padding: 20px;
 }
 
 elm-canvas {
   display: block;
+}
+
+.tab-container {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  .tab-nav {
+    background-color: var(--base-muted-color);
+    border-top-left-radius: var(--border-radius);
+    border-top-right-radius: var(--border-radius);
+    border-bottom: 1px solid var(--border-color);
+    .tabs {
+      display: flex;
+      margin-top: -1px;
+      margin-left: -1px;
+      margin-bottom: -1px;
+      border-top-left-radius: var(--border-radius);
+      border-top-right-radius: var(--border-radius);
+      .tab {
+        display: block;
+        padding: 0.5em;
+        background-color: var(--base-muted-color);
+        border: 1px solid #0000;
+        border-bottom: 1px solid var(--border-color);
+        border-top-left-radius: var(--border-radius);
+        border-top-right-radius: var(--border-radius);
+      }
+      .tab[aria-selected="true"]{
+        border-color: var(--border-color);
+        border-bottom: 1px solid #FFF;
+        background-color: #FFF;
+      }
+    }
+  }
+  .tab-contents {
+    padding: 10px 20px;
+  }
 }
