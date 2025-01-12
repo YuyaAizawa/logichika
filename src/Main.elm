@@ -11,6 +11,7 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Json.Decode as Json
 import Set exposing (Set)
+import Time
 
 
 main =
@@ -28,13 +29,14 @@ main =
 -----------
 
 type alias Model =
-  { grid : Blueprint
+  { blueprint : Blueprint
   , tool : Tool
   , zoom : Int
   , text : String
   , circuit : Circuit
   , status : Status
   , tab : Tab
+  , speed : Speed
   }
 
 type alias Blueprint = Dict Coords Element
@@ -57,21 +59,28 @@ type Tab
   = EditorTab
   | SimulatorTab
 
+type Speed
+  = Pose
+  | Turtle
+  | Llama
+  | Cheetah
+
 init : () -> ( Model, Cmd msg )
 init _ =
   let
-    grid = Dict.empty
-    circuit = compile grid
+    blueprint = Dict.empty
+    circuit = compile blueprint
     status = initStatus circuit
   in
     (
-      { grid = grid
+      { blueprint = blueprint
       , tool = Drawer Wire
-      , zoom = 8
+      , zoom = 4
       , text = ""
       , circuit = circuit
       , status = status
       , tab = EditorTab
+      , speed = Pose
       }
     , Cmd.none
     )
@@ -88,11 +97,12 @@ type Msg
   | MouseUp MouseState
   | MouseUpOutsideElm
   | MouseMove MouseState
-  | UpdateText String
+  | TextUpdated String
   | Serialize
   | Deserialize
   | Tick
   | TabClicked Tab
+  | SpeedUpdated Speed
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -114,16 +124,16 @@ update_ msg model =
         case model.tab of
           EditorTab ->
             let
-              grid =
+              blueprint =
                 case model.tool of
                   Drawer element ->
-                    model.grid
+                    model.blueprint
                       |> Dict.insert target element
                   Eraser ->
-                    model.grid
+                    model.blueprint
                       |> Dict.remove target
             in
-              { model | grid = grid }
+              { model | blueprint = blueprint }
 
           SimulatorTab ->
             case model.circuit.coordsToButton |> Dict.get target of
@@ -157,14 +167,14 @@ update_ msg model =
     MouseMove mouse ->
       model
 
-    UpdateText text_ ->
+    TextUpdated text_ ->
       { model | text = text_ }
 
     Serialize ->
-      { model | text = serialize model.grid }
+      { model | text = serialize model.blueprint }
 
     Deserialize ->
-      { model | grid = deserialize model.text }
+      { model | blueprint = deserialize model.text }
 
     Tick ->
       { model | status = updateStatus model.circuit model.status }
@@ -179,14 +189,18 @@ update_ msg model =
 
           SimulatorTab ->
             let
-              circuit = compile model.grid
+              circuit = compile model.blueprint
               status = initStatus circuit
             in
               { model
               | circuit = circuit
               , status = status
               , tab = tab
+              , speed = Pose
               }
+
+    SpeedUpdated speed ->
+      { model | speed = speed }
 
 
 
@@ -219,6 +233,7 @@ view model =
 
         SimulatorTab ->
           [ simulationView model.zoom model.circuit model.status
+          , speedView model.speed
           , Html.button [ Events.onClick Tick ] [ Html.text "Tick" ]
           ]
   in
@@ -275,7 +290,7 @@ blueprintView model =
     , onMouseDown MouseDown
     , onMouseMove MouseMove
     ]
-    (fillBackGound :: (model.grid |> Dict.toList |> List.map (renderElement model.zoom)))
+    (fillBackGound :: (model.blueprint |> Dict.toList |> List.map (renderElement model.zoom)))
 
 renderElement : Int -> ( Coords, Element ) -> Renderable
 renderElement zoom ( coords, element ) =
@@ -306,7 +321,7 @@ serializeView : String -> Html Msg
 serializeView text =
   Html.div []
     [ Html.textarea
-      [ Events.onInput UpdateText
+      [ Events.onInput TextUpdated
       , Attrs.value text
       ] []
     , Html.button
@@ -391,6 +406,27 @@ simulationView zoom circuit status =
       ]
       (fillBackGound :: renderedElements)
 
+-- SPEED --
+
+speedView : Speed -> Html Msg
+speedView current =
+  let
+    option name speed =
+      Html.button
+        [ Attrs.class "option"
+        , ariaSelected (speed == current)
+        , Events.onClick <| SpeedUpdated speed
+        ]
+        [ Html.text name ]
+  in
+    Html.div [ Attrs.class "speed" ]
+      [ Html.label [] [ Html.text "Speed: "]
+      , option "⛄" Pose
+      , option "🐢" Turtle
+      , option "🦙" Llama
+      , option "🐆" Cheetah
+      ]
+
 
 
 -------------------
@@ -400,8 +436,17 @@ simulationView zoom circuit status =
 port mouseUp : ( () -> msg ) -> Sub msg
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    mouseUp (\_ -> MouseUpOutsideElm)
+subscriptions model =
+  let
+    mouse = mouseUp (\_ -> MouseUpOutsideElm)
+    autoTick =
+      case model.speed of
+        Pose -> Sub.none
+        Turtle -> Time.every 500 (\_ -> Tick)
+        Llama -> Time.every 96 (\_ -> Tick)
+        Cheetah -> Time.every 16 (\_ -> Tick)
+  in
+    Sub.batch [ mouse, autoTick ]
 
 
 

@@ -12,8 +12,8 @@
   --border-radius: 0.3rem;
 
   --button-base-color: #F1F3FA;
-  --button-hover-color: #E9EDF5;
-  --button-active-color: #E1E6EF;
+  --button-hover-color: #E6EAF2;
+  --button-active-color: #D8DDE4;
   --button-border-radius: 0.15rem;
 }
 
@@ -45,6 +45,10 @@ button:hover {
 
 button:active {
   background-color: var(--button-active-color);
+}
+
+button.option[aria-selected="true"] {
+    background-color: var(--button-active-color);
 }
 
 .tab-container {
@@ -90,7 +94,13 @@ button:active {
   .option {
     padding: 2px 4px;
   }
-  .option[aria-selected="true"] {
-    background-color: var(--button-active-color);
+}
+
+.speed {
+  padding: 4px 0;
+  display: flex;
+  gap: 4px;
+  .option {
+    padding: 2px 4px;
   }
 }
