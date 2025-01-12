@@ -322,7 +322,7 @@ serializeView text =
 simulationView : Int -> Circuit -> Status -> Html Msg
 simulationView zoom circuit status =
   let
-    shapes_1 =
+    renderedActiveCrosses =
       status.active.wires
         |> Set.toList
         |> List.concatMap (\idx ->
@@ -334,70 +334,62 @@ simulationView zoom circuit status =
               crosses |> List.map (\coords -> renderGrid zoom coords color.crossActive)
         )
 
-    shapes_2 =
-      shapes_1 |> appendShapes circuit.gates (\idx { region, kind } ->
-        let
-          color_ =
-            case ( kind, status.active.gates |> Set.member idx ) of
-              ( LogicAnd, True ) -> color.andActive
-              ( LogicAnd, False ) -> color.andInactive
-              ( LogicNor, True ) -> color.norActive
-              ( LogicNor, False ) -> color.norInactive
-        in
-          region |> List.map (\coords -> renderGrid zoom coords color_)
-      )
+    renderedCrosses =
+      circuit.allCrosses
+        |> List.map (\coords -> renderGrid zoom coords color.crossInactive)
+        |> (\a -> a ++ renderedActiveCrosses)
 
-    shapes_3 =
-      shapes_2 |> appendShapes circuit.buttons (\idx { region } ->
-        let
-          color_ =
-            if status.active.buttons |> Set.member idx then
-              color.buttonActive
-            else
-              color.buttonInactive
-        in
-          region |> List.map (\coords -> renderGrid zoom coords color_)
-      )
+    renderElements elementsExtractor statusExtractor colorDecider rendered =
+      let
+        elements = elementsExtractor circuit
+        actives = statusExtractor status.active
+      in
+        elements
+          |> Array.toIndexedList
+          |> List.foldl (\( idx, element ) acc ->
+            let
+              isActive = actives |> Set.member idx
+              color_ = colorDecider isActive element
+              renderables =
+                element.region
+                  |> List.map (\coords -> renderGrid zoom coords color_)
+            in
+              renderables ++ acc
+          ) rendered
 
-    shapes_4 =
-      shapes_3 |> appendShapes circuit.wires (\idx { region, crosses } ->
-        let
-          ( color_, crossShapes ) =
-            if status.active.wires |> Set.member idx then
-              ( color.wireActive
-              , []
-              )
-            else
-              ( color.wireInactive
-              , crosses |> List.map (\coords -> renderGrid zoom coords color.crossInactive)
-              )
-        in
-          crossShapes ++ (region |> List.map (\coords -> renderGrid zoom coords color_))
-      )
-
-    shapes_5 =
-      shapes_4 |> appendShapes circuit.inputPins (\idx { region } ->
-        let
-          color_ =
-            if status.active.inputPins |> Set.member idx then
-              color.inputActive
-            else
-              color.inputInactive
-        in
-          region |> List.map (\coords -> renderGrid zoom coords color_)
-      )
+    renderedElements =
+      renderedCrosses
+        |> renderElements .gates .gates (\isActive { kind } ->
+          case ( kind, isActive ) of
+            ( LogicAnd, True ) -> color.andActive
+            ( LogicAnd, False ) -> color.andInactive
+            ( LogicNor, True ) -> color.norActive
+            ( LogicNor, False ) -> color.norInactive
+        )
+        |> renderElements .buttons .buttons (\isActive _ ->
+          if isActive then
+            color.buttonActive
+          else
+            color.buttonInactive
+        )
+        |> renderElements .wires .wires (\isActive _ ->
+          if isActive then
+            color.wireActive
+          else
+            color.wireInactive
+        )
+        |> renderElements .inputPins .inputPins (\isActive _ ->
+          if isActive then
+            color.inputActive
+          else
+            color.inputInactive
+        )
   in
     Canvas.toHtml (canvasWidth, canvasHeight)
       [ Attrs.style "display" "block"
       , onMouseDown MouseDown
       ]
-      (fillBackGound :: shapes_5)
-
-appendShapes : Array a -> (Int -> a -> List Renderable) -> List Renderable -> List Renderable
-appendShapes array mapper list =
-  array
-    |> Array.toIndexedList
-    |> List.foldl (\( idx, a ) acc -> mapper idx a ++ acc) list
+      (fillBackGound :: renderedElements)
 
 
 
@@ -424,6 +416,7 @@ type alias Circuit =
   , buttons : Array ButtonGroup
   , wires : Array WireGroup
   , inputPins : Array InputPinGroup
+  , allCrosses : List Coords
   , coordsToButton : Dict Coords ButtonIdx
   }
 
@@ -561,7 +554,7 @@ compile blueprint =
     regions : List ( Element, Region )
     regions = splitIntoRegions blueprint
 
-    indexed : IndexedRegions
+    indexed : ( IndexedRegions, Set Coords )
     indexed = indexRegeions blueprint regions
 
     circuit : Circuit
@@ -625,7 +618,7 @@ splitIntoRegionsHelp candidates processeds result blueprint =
       result
 
     ( coords, element ) :: rest ->
-      if (processeds |> Set.member coords) || element == Cross then
+      if processeds |> Set.member coords then
         splitIntoRegionsHelp rest processeds result blueprint
       else
         let
@@ -704,7 +697,7 @@ type alias IndexedRegions =
   , gateIdxFromCoords : Dict Coords Int
   }
 
-indexRegeions : Blueprint -> List ( Element, Region ) -> IndexedRegions
+indexRegeions : Blueprint -> List ( Element, Region ) -> ( IndexedRegions, Set Coords )
 indexRegeions blueprint regions =
   let
     tmpWires : Array Region
@@ -838,30 +831,44 @@ indexRegeions blueprint regions =
           , gateRegions = Array.fromList listStyle.gateRegions
           }
         )
+
+    crossCoords =
+      regions
+        |> List.concatMap (\( kind, { region } ) ->
+          if kind == Cross then
+            region
+          else
+            []
+        )
+        |> Set.fromList
   in
-    { wireRegions = wireRegions
-    , wireIdxFromCoords = wireRegions |> getReverseLookup .surfaces
-    , buttonRegions = buttonRegions
-    , buttonIdxFromCoords = buttonRegions |> getReverseLookup .surfaces
-    , inputPinRegions = inputPinRegions
-    , inputPinIdxFromCoords = inputPinRegions |> getReverseLookup .surfaces
-    , gateRegions = gateRegions
-    , gateIdxFromCoords = gateRegions |> getReverseLookup .surfaces
-    }
+    ( { wireRegions = wireRegions
+      , wireIdxFromCoords = wireRegions |> getReverseLookup .surfaces
+      , buttonRegions = buttonRegions
+      , buttonIdxFromCoords = buttonRegions |> getReverseLookup .surfaces
+      , inputPinRegions = inputPinRegions
+      , inputPinIdxFromCoords = inputPinRegions |> getReverseLookup .surfaces
+      , gateRegions = gateRegions
+      , gateIdxFromCoords = gateRegions |> getReverseLookup .surfaces
+      }
+    , crossCoords
+    )
 
 -- CONNECT --
 
-connectRegions : IndexedRegions -> Circuit
+connectRegions : ( IndexedRegions, Set Coords ) -> Circuit
 connectRegions
-  { wireRegions
-  , wireIdxFromCoords
-  , buttonRegions
-  , buttonIdxFromCoords
-  , inputPinRegions
-  , inputPinIdxFromCoords
-  , gateRegions
-  , gateIdxFromCoords
-  } =
+  ( { wireRegions
+    , wireIdxFromCoords
+    , buttonRegions
+    , buttonIdxFromCoords
+    , inputPinRegions
+    , inputPinIdxFromCoords
+    , gateRegions
+    , gateIdxFromCoords
+    }
+  , crossCoords
+  ) =
   let
     coordsToIdxes idxes dict =
       idxes |> List.filterMap (\idx -> Dict.get idx dict)
@@ -899,6 +906,8 @@ connectRegions
           { region = region, connectedWires = connectedWires }
       )
 
+    allCrosses = Set.toList crossCoords
+
     coordsToButton =
       buttonRegions
         |> Array.toIndexedList
@@ -907,7 +916,7 @@ connectRegions
         )
         |> Dict.fromList
   in
-    Circuit gates buttons wires inputPins coordsToButton
+    Circuit gates buttons wires inputPins allCrosses coordsToButton
 
 
 
