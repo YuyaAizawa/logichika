@@ -1,5 +1,7 @@
 # Logpe
 
+![demo image](demo.gif)
+
 ビカビカ光る論理回路のシミュレータ
 
 動かせるページ: https://yuyaaizawa.github.io/logichika/
