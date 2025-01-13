@@ -13,6 +13,9 @@ import Json.Decode as Json
 import Set exposing (Set)
 import Time
 
+import LogiChika exposing (Coords, color)
+import LogiChika.Blueprint as Blueprint exposing (Blueprint, Element)
+
 
 main =
   Browser.element
@@ -39,20 +42,8 @@ type alias Model =
   , speed : Speed
   }
 
-type alias Blueprint = Dict Coords Element
-
-type alias Coords = ( Int, Int )
-
-type Element
-  = Wire
-  | Cross
-  | Button
-  | Input
-  | And
-  | Nor
-
 type Tool
-  = Drawer Element
+  = Drawer Blueprint.Element
   | Eraser
 
 type Tab
@@ -68,13 +59,13 @@ type Speed
 init : () -> ( Model, Cmd msg )
 init _ =
   let
-    blueprint = Dict.empty
+    blueprint = Blueprint.init canvasWidth canvasHeight
     circuit = compile blueprint
     status = initStatus circuit
   in
     (
       { blueprint = blueprint
-      , tool = Drawer Wire
+      , tool = Drawer Blueprint.Wire
       , zoom = 4
       , text = ""
       , circuit = circuit
@@ -129,10 +120,10 @@ update_ msg model =
                 case model.tool of
                   Drawer element ->
                     model.blueprint
-                      |> Dict.insert target element
+                      |> Blueprint.put target element
                   Eraser ->
                     model.blueprint
-                      |> Dict.remove target
+                      |> Blueprint.remove target
             in
               { model | blueprint = blueprint }
 
@@ -172,10 +163,10 @@ update_ msg model =
       { model | text = text_ }
 
     Serialize ->
-      { model | text = serialize model.blueprint }
+      { model | text = Blueprint.serialize model.blueprint }
 
     Deserialize ->
-      { model | blueprint = deserialize model.text }
+      { model | blueprint = Blueprint.deserialize canvasWidth canvasWidth model.text }
 
     Tick ->
       { model | status = updateStatus model.circuit model.status }
@@ -227,6 +218,12 @@ view model =
         ]
         [ Html.text text ]
 
+    tabs =
+      Html.div [ Attrs.class "tabs" ]
+        [ tabView EditorTab "Editor"
+        , tabView SimulatorTab "Simulator"
+        ]
+
     tabContents =
       case model.tab of
         EditorTab ->
@@ -245,12 +242,7 @@ view model =
   in
     Html.main_ []
       [ Html.div [ Attrs.class "tab-container" ]
-        [ Html.div [ Attrs.class "tab-nav" ]
-          [ Html.div [ Attrs.class "tabs" ]
-              [ tabView EditorTab "Editor"
-              , tabView SimulatorTab "Simulator"
-              ]
-          ]
+        [ Html.div [ Attrs.class "tab-nav" ] [ tabs ]
         , Html.div [ Attrs.class "tab-contents" ] tabContents
         ]
       ]
@@ -278,12 +270,12 @@ palletView current =
   in
     Html.div [ Attrs.class "pallet selector" ]
       [ option "Eraser" color.background Eraser
-      , option "Wire" color.wireInactive (Drawer Wire)
-      , option "Cross" color.crossInactive (Drawer Cross)
-      , option "Button" color.buttonInactive (Drawer Button)
-      , option "InputPin" color.inputInactive (Drawer Input)
-      , option "AndGate" color.andInactive (Drawer And)
-      , option "NorGate" color.norInactive (Drawer Nor)
+      , option "Wire" color.wireInactive (Drawer Blueprint.Wire)
+      , option "Cross" color.crossInactive (Drawer Blueprint.Cross)
+      , option "Button" color.buttonInactive (Drawer Blueprint.Button)
+      , option "InputPin" color.inputInactive (Drawer Blueprint.Input)
+      , option "AndGate" color.andInactive (Drawer Blueprint.And)
+      , option "NorGate" color.norInactive (Drawer Blueprint.Nor)
       ]
 
 -- BLUEPRINT --
@@ -296,30 +288,7 @@ blueprintView model =
     , onMouseDown MouseDown
     , onMouseMove MouseMove
     ]
-    (fillBackGound :: (model.blueprint |> Dict.toList |> List.map (renderElement model.zoom)))
-
-renderElement : Int -> ( Coords, Element ) -> Renderable
-renderElement zoom ( coords, element ) =
-  let
-    color_ =
-      case element of
-        Wire -> color.wireInactive
-        Cross -> color.crossInactive
-        Button -> color.buttonInactive
-        Input -> color.inputInactive
-        And -> color.andInactive
-        Nor -> color.norInactive
-  in
-    renderGrid zoom coords color_
-
-fillBackGound : Renderable
-fillBackGound =
-  shapes [ fill color.background ] [ rect (0, 0) canvasWidth canvasHeight ]
-
-renderGrid : Int -> Coords -> Color -> Renderable
-renderGrid zoom ( x, y ) color_ =
-  shapes [ fill color_ ]
-    [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
+    <| Blueprint.render canvasWidth canvasHeight model.zoom model.blueprint
 
 -- ZOOM --
 
@@ -433,6 +402,15 @@ simulationView zoom circuit status =
       , onMouseDown MouseDown
       ]
       (fillBackGound :: renderedElements)
+
+fillBackGound : Renderable
+fillBackGound =
+  shapes [ fill color.background ] [ rect (0, 0) canvasWidth canvasHeight ]
+
+renderGrid : Int -> Coords -> Color -> Renderable
+renderGrid zoom ( x, y ) color_ =
+  shapes [ fill color_ ]
+    [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
 
 -- SPEED --
 
@@ -682,9 +660,13 @@ getReverseLookup keysExtractor array =
 
 splitIntoRegions : Blueprint -> List ( Element, Region )
 splitIntoRegions blueprint =
-  splitIntoRegionsHelp (Dict.toList blueprint) Set.empty [] blueprint
+  let
+    elmentsList = Blueprint.elements blueprint
+    elementsDict = Dict.fromList elmentsList
+  in
+    splitIntoRegionsHelp elmentsList Set.empty [] elementsDict
 
-splitIntoRegionsHelp : List ( Coords, Element ) -> Set Coords -> List ( Element, Region ) -> Blueprint -> List ( Element, Region )
+splitIntoRegionsHelp : List ( Coords, Element ) -> Set Coords -> List ( Element, Region ) -> Dict Coords Element -> List ( Element, Region )
 splitIntoRegionsHelp candidates processeds result blueprint =
   case candidates of
     [] ->
@@ -706,7 +688,7 @@ splitIntoRegionsHelp candidates processeds result blueprint =
         in
           splitIntoRegionsHelp rest processeds_ result_ blueprint
 
-getRegionDfs : Element -> List Coords -> List Coords -> List Coords -> Blueprint -> Region
+getRegionDfs : Element -> List Coords -> List Coords -> List Coords -> Dict Coords Element -> Region
 getRegionDfs target stack region neighbors blueprint =
   case stack of
     [] ->
@@ -777,7 +759,7 @@ indexRegeions blueprint regions =
     tmpWires =
       regions
         |> List.filterMap (\( kind, region ) ->
-          if kind == Wire then
+          if kind == Blueprint.Wire then
             Just region
           else
             Nothing
@@ -790,11 +772,11 @@ indexRegeions blueprint regions =
 
     trailCross : Coords -> Coords -> List Coords -> ( List Coords, Maybe Int )
     trailCross start direction trail =
-      case blueprint |> Dict.get start of
-        Just Wire ->
+      case blueprint |> Blueprint.get start of
+        Just Blueprint.Wire ->
           ( trail, tmpWireIdx |> Dict.get start )
 
-        Just Cross ->
+        Just Blueprint.Cross ->
           let
             ( x, y ) = start
             ( dx, dy ) = direction
@@ -883,16 +865,16 @@ indexRegeions blueprint regions =
       regions
         |> List.foldl (\( kind, region ) acc ->
           case kind of
-            Button ->
+            Blueprint.Button ->
               { acc | buttonRegions = region :: acc.buttonRegions }
 
-            Input ->
+            Blueprint.Input ->
               { acc | inputPinRegions = region :: acc.inputPinRegions }
 
-            And ->
+            Blueprint.And ->
               { acc | gateRegions = (region |> extendsToGateRegion LogicAnd) :: acc.gateRegions }
 
-            Nor ->
+            Blueprint.Nor ->
               { acc | gateRegions = (region |> extendsToGateRegion LogicNor) :: acc.gateRegions }
 
             _ ->
@@ -908,7 +890,7 @@ indexRegeions blueprint regions =
     crossCoords =
       regions
         |> List.concatMap (\( kind, { region } ) ->
-          if kind == Cross then
+          if kind == Blueprint.Cross then
             region
           else
             []
@@ -1030,103 +1012,6 @@ onMouseMove msgMapper =
   mouseDecoder
     |> Json.map msgMapper
     |> Events.on "mousemove"
-
-
-
------------
--- COLOR --
------------
-
-color =
-  { background     = Color.rgb255   0   0   0
-  , wireActive     = Color.rgb255   0 255 255
-  , wireInactive   = Color.rgb255  64 128 128
-  , crossActive   = Color.rgb255  64 192 192
-  , crossInactive = Color.rgb255  32  64  64
-  , buttonActive   = Color.rgb255 255 128  32
-  , buttonInactive = Color.rgb255 192  96  32
-  , inputActive    = Color.rgb255 237  28  36
-  , inputInactive  = Color.rgb255 128  28  36
-  , andActive      = Color.rgb255 255 192 255
-  , andInactive    = Color.rgb255 160 128 160
-  , norActive      = Color.rgb255 128 196 128
-  , norInactive    = Color.rgb255  96 128  96
-  }
-
-
-
----------------
--- SERIALIZE --
----------------
-
-serialize : Blueprint -> String
-serialize blueprint =
-  let
-    coordsList = Dict.keys blueprint
-
-    maxLine =
-      coordsList
-        |> List.map (\( _, y ) -> y)
-        |> List.maximum
-        |> Maybe.withDefault 0
-
-    maxColumn =
-      coordsList
-        |> List.map (\( x, y ) -> x)
-        |> List.maximum
-        |> Maybe.withDefault 0
-  in
-    List.range 0 maxLine
-      |> List.map(\y ->
-        List.range 0 maxColumn
-          |> List.map(\x ->
-            blueprint
-              |> Dict.get ( x, y )
-              |> toChar
-            )
-          |> String.fromList
-      )
-      |> String.join "\n"
-
-deserialize : String -> Blueprint
-deserialize src =
-  src
-    |> String.lines
-    |> List.indexedMap (\line string ->
-      string
-        |> String.toList
-        |> List.indexedMap (\column char ->
-          ( ( column, line ), fromChar char )
-        )
-        |> List.filterMap (\( coords, maybeChar ) ->
-          maybeChar
-            |> Maybe.map(\char -> ( coords, char ))
-        )
-    )
-    |> List.concat
-    |> Dict.fromList
-
-toChar : Maybe Element -> Char
-toChar element =
-  case element of
-    Nothing      -> ' '
-    Just Wire    -> 'w'
-    Just Cross  -> 'c'
-    Just Button  -> 'b'
-    Just Input   -> 'p'
-    Just And     -> 'a'
-    Just Nor     -> 'n'
-
-fromChar : Char -> Maybe Element
-fromChar char =
-  case char of
-    'w' -> Just Wire
-    'c' -> Just Cross
-    'b' -> Just Button
-    'p' -> Just Input
-    'a' -> Just And
-    'n' -> Just Nor
-    _   -> Nothing
 
 
 
