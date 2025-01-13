@@ -99,12 +99,12 @@ serialize this =
         |> coordsList
         |> List.unzip
 
-    maxLine =
+    maxColumn =
       xs
         |> List.maximum
         |> Maybe.withDefault 0
 
-    maxColumn =
+    maxLine =
       ys
         |> List.maximum
         |> Maybe.withDefault 0
