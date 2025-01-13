@@ -185,7 +185,7 @@ getRegionDfs target stack region neighbors blueprint =
       { region = region
       , neighbors = neighbors
       , surfaces = getSurfaces neighbors region
-      } |> Debug.log "getRegionDfs"
+      }
 
     hd :: tl ->
       case blueprint |> Dict.get hd of

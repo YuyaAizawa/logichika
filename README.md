@@ -2,6 +2,8 @@
 
 ビカビカ光る論理回路のシミュレータ
 
+動かせるページ: https://yuyaaizawa.github.io/logichika/
+
 ## build
 
 ```bash
