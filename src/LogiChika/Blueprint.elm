@@ -19,6 +19,7 @@ import Color exposing (Color)
 import Dict exposing (Dict)
 
 import LogiChika exposing (Coords, color)
+import LogiChika.Internal exposing (..)
 
 
 type Blueprint = Blueprint
@@ -201,13 +202,3 @@ renderElement zoom ( coords, element ) =
         Nor -> color.norInactive
   in
     renderGrid zoom coords color_
-
-fillBackGound : Int -> Int -> Renderable
-fillBackGound width height =
-  shapes [ fill color.background ]
-    [ rect (0, 0) (toFloat width) (toFloat height) ]
-
-renderGrid : Int -> Coords -> Color -> Renderable
-renderGrid zoom ( x, y ) color_ =
-  shapes [ fill color_ ]
-    [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
