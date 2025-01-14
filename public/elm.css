@@ -95,3 +95,31 @@ button.option[aria-selected="true"] {
     padding: 10px 20px;
   }
 }
+
+.right-column-container {
+  display: flex;
+}
+.right-column-container > :nth-last-child(2) {
+  margin-right: auto;
+}
+
+#arrow-container {
+  display: grid;
+  grid-template:
+    ". u u ." 40px
+    "l l r r" 40px
+    ". d d ." 40px
+    / 20px 20px 20px 20px;
+}
+#arrow-container > :nth-child(1) {
+  grid-area: u;
+}
+#arrow-container > :nth-child(2) {
+  grid-area: r;
+}
+#arrow-container > :nth-child(3) {
+  grid-area: d;
+}
+#arrow-container > :nth-child(4) {
+  grid-area: l;
+}

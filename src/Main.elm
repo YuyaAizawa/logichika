@@ -33,6 +33,7 @@ main =
 type alias Model =
   { blueprint : Blueprint
   , tool : Tool
+  , offset : Coords
   , zoom : Int
   , text : String
   , circuit : Circuit
@@ -63,6 +64,7 @@ init _ =
     (
       { blueprint = blueprint
       , tool = Drawer Blueprint.Wire
+      , offset = ( 0, 0 )
       , zoom = 4
       , text = ""
       , circuit = circuit
@@ -91,6 +93,8 @@ type Msg
   | TabClicked Tab
   | SpeedUpdated Speed
   | ZoomUpdated Int
+  | Pan Direction
+
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -167,6 +171,46 @@ update_ msg model =
 
     ZoomUpdated zoom ->
       { model | zoom = zoom }
+        |> validateOffset
+
+    Pan direction ->
+      model |> pan direction
+
+type Direction
+  = Up
+  | Right
+  | Down
+  | Left
+
+pan : Direction -> Model -> Model
+pan direction model =
+  let
+    ( dx, dy ) =
+      case direction of
+        Up    -> (  0, -1 )
+        Right -> (  1,  0 )
+        Down  -> (  0,  1 )
+        Left  -> ( -1,  0 )
+
+    panX = dx * canvasWidth  // model.zoom // 2
+    panY = dy * canvasHeight // model.zoom // 2
+
+    ( x, y ) = model.offset
+
+    offset = ( x + panX, y + panY )
+  in
+    { model | offset = offset }
+      |> validateOffset
+
+validateOffset : Model -> Model
+validateOffset model =
+  let
+    maxX = canvasWidth  - (canvasWidth  // model.zoom)
+    maxY = canvasHeight - (canvasHeight // model.zoom)
+    ( x, y ) = model.offset
+    offset = ( x |> clamp 0 maxX, y |> clamp 0 maxY )
+  in
+    { model | offset = offset }
 
 
 
@@ -174,8 +218,8 @@ update_ msg model =
 -- VIEW --
 ----------
 
-canvasWidth = 640
-canvasHeight = 480
+canvasWidth = 640   -- must be dividable by the maximum zoom
+canvasHeight = 480  -- must be dividable by the maximum zoom
 
 view : Model -> Html Msg
 view model =
@@ -199,16 +243,26 @@ view model =
       case model.tab of
         EditorTab ->
           [ blueprintView model
-          , palletView model.tool
-          , zoomSelectorView model.zoom
-          , serializeView model.text
+          , Html.div [ Attrs.class "right-column-container"]
+            [ Html.div []
+              [ palletView model.tool
+              , zoomSelectorView model.zoom
+              , serializeView model.text
+              ]
+            , arrowButtonsView
+            ]
           ]
 
         SimulatorTab ->
-          [ simulationView model.zoom model.circuit
-          , speedSelectorView model.speed
-          , zoomSelectorView model.zoom
-          , Html.button [ Events.onClick Tick ] [ Html.text "Tick" ]
+          [ simulationView model
+          , Html.div [ Attrs.class "right-column-container"]
+            [ Html.div []
+              [ speedSelectorView model.speed
+              , zoomSelectorView model.zoom
+              , Html.button [ Events.onClick Tick ] [ Html.text "Tick" ]
+              ]
+            , arrowButtonsView
+            ]
           ]
   in
     Html.main_ []
@@ -217,6 +271,15 @@ view model =
         , Html.div [ Attrs.class "tab-contents" ] tabContents
         ]
       ]
+
+arrowButtonsView : Html Msg
+arrowButtonsView =
+  Html.div [ Attrs.id "arrow-container" ]
+    [ Html.button [ Events.onClick <| Pan Up    ] [ Html.text "↑" ]
+    , Html.button [ Events.onClick <| Pan Right ] [ Html.text "→" ]
+    , Html.button [ Events.onClick <| Pan Down  ] [ Html.text "↓" ]
+    , Html.button [ Events.onClick <| Pan Left  ] [ Html.text "←" ]
+    ]
 
 ariaSelected : Bool -> Html.Attribute msg
 ariaSelected bool =
@@ -252,14 +315,14 @@ palletView current =
 -- BLUEPRINT --
 
 blueprintView : Model -> Html Msg
-blueprintView model =
+blueprintView { blueprint, offset, zoom } =
   Canvas.toHtml (canvasWidth, canvasHeight)
     [ Attrs.style "display" "block"
     , onMouseUp MouseUp
     , onMouseDown MouseDown
     , onMouseMove MouseMove
     ]
-    <| Blueprint.render canvasWidth canvasHeight model.zoom model.blueprint
+    <| Blueprint.render canvasWidth canvasHeight offset zoom blueprint
 
 -- ZOOM --
 
@@ -302,13 +365,13 @@ serializeView text =
 
 -- SIMULATION --
 
-simulationView : Int -> Circuit -> Html Msg
-simulationView zoom circuit =
+simulationView : Model -> Html Msg
+simulationView { offset, zoom, circuit } =
   Canvas.toHtml (canvasWidth, canvasHeight)
     [ Attrs.style "display" "block"
     , onMouseDown MouseDown
     ]
-    <| Circuit.render canvasWidth canvasHeight zoom circuit
+    <| Circuit.render canvasWidth canvasHeight offset zoom circuit
 
 -- SPEED --
 

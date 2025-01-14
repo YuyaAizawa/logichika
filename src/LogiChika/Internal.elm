@@ -15,7 +15,7 @@ fillBackGound width height =
   shapes [ fill color.background ]
     [ rect (0, 0) (toFloat width) (toFloat height) ]
 
-renderGrid : Int -> Coords -> Color -> Renderable
-renderGrid zoom ( x, y ) color_ =
+renderGrid : Coords -> Int -> Coords -> Color -> Renderable
+renderGrid ( offsetX, offsetY ) zoom ( x, y ) color_ =
   shapes [ fill color_ ]
-    [ rect ( x * zoom |> toFloat, y * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]
+    [ rect ( (x - offsetX) * zoom |> toFloat, (y - offsetY) * zoom |> toFloat ) (toFloat zoom) (toFloat zoom) ]

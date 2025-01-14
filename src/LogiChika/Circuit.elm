@@ -587,8 +587,8 @@ push coords (Circuit { logic, status } as this) =
 -- RENDER --
 ------------
 
-render : Int -> Int -> Int -> Circuit -> List Renderable
-render width height zoom (Circuit { logic, status }) =
+render : Int -> Int -> Coords -> Int -> Circuit -> List Renderable
+render width height offset zoom (Circuit { logic, status }) =
   let
     renderedActiveCrosses =
       status.active.wires
@@ -599,12 +599,12 @@ render width height zoom (Circuit { logic, status }) =
               []
 
             Just { crosses } ->
-              crosses |> List.map (\coords -> renderGrid zoom coords color.crossActive)
+              crosses |> List.map (\coords -> renderGrid offset zoom coords color.crossActive)
         )
 
     renderedCrosses =
       logic.allCrosses
-        |> List.map (\coords -> renderGrid zoom coords color.crossInactive)
+        |> List.map (\coords -> renderGrid offset zoom coords color.crossInactive)
         |> (\a -> a ++ renderedActiveCrosses)
 
     renderElements elementsExtractor statusExtractor colorDecider rendered =
@@ -620,7 +620,7 @@ render width height zoom (Circuit { logic, status }) =
               color_ = colorDecider isActive element
               renderables =
                 element.region
-                  |> List.map (\coords -> renderGrid zoom coords color_)
+                  |> List.map (\coords -> renderGrid offset zoom coords color_)
             in
               renderables ++ acc
           ) rendered

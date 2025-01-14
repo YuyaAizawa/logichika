@@ -177,20 +177,20 @@ fromChar char =
 
 -- TODO: drawing range
 
-render : Int -> Int -> Int -> Blueprint -> List Renderable
-render width height zoom this =
+render : Int -> Int -> Coords -> Int -> Blueprint -> List Renderable
+render width height offset zoom this =
   let
     background =
       fillBackGound width height
     elements_ =
       this
         |> elements
-        |> List.map (renderElement zoom)
+        |> List.map (renderElement offset zoom)
   in
     background :: elements_
 
-renderElement : Int -> ( Coords, Element ) -> Renderable
-renderElement zoom ( coords, element ) =
+renderElement : Coords -> Int -> ( Coords, Element ) -> Renderable
+renderElement offset zoom ( coords, element ) =
   let
     color_ =
       case element of
@@ -201,4 +201,4 @@ renderElement zoom ( coords, element ) =
         And -> color.andInactive
         Nor -> color.norInactive
   in
-    renderGrid zoom coords color_
+    renderGrid offset zoom coords color_
