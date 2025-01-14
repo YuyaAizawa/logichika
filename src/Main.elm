@@ -39,6 +39,7 @@ type alias Model =
   , circuit : Circuit
   , tab : Tab
   , speed : Speed
+  , dragStart : Maybe ( Float, Float )  -- "Just _" means mouse button down
   }
 
 type Tool
@@ -70,6 +71,7 @@ init _ =
       , circuit = circuit
       , tab = EditorTab
       , speed = Pose
+      , dragStart = Nothing
       }
     , Cmd.none
     )
@@ -107,37 +109,23 @@ update_ msg model =
       { model | tool = tool }
 
     MouseDown mouse ->
-      let
-        target =
-          ( floor mouse.x // model.zoom
-          , floor mouse.y // model.zoom
-          )
-      in
-        case model.tab of
-          EditorTab ->
-            let
-              blueprint =
-                case model.tool of
-                  Drawer element ->
-                    model.blueprint
-                      |> Blueprint.put target element
-                  Eraser ->
-                    model.blueprint
-                      |> Blueprint.remove target
-            in
-              { model | blueprint = blueprint }
-
-          SimulatorTab ->
-            { model | circuit = model.circuit |> Circuit.push target }
+      model
+        |> pointingAction mouse
+        |> (\m -> { m | dragStart = Just ( mouse.x, mouse.y ) })
 
     MouseUp mouse ->
-      model
+      { model | dragStart = Nothing }
 
     MouseUpOutsideElm ->
-      model
+      { model | dragStart = Nothing }
 
     MouseMove mouse ->
-      model
+      case model.dragStart of
+        Nothing ->
+          model
+
+        Just _ ->
+          model |> pointingAction mouse
 
     TextUpdated text_ ->
       { model | text = text_ }
@@ -149,7 +137,16 @@ update_ msg model =
       { model | blueprint = Blueprint.deserialize canvasWidth canvasWidth model.text }
 
     Tick ->
-      { model | circuit = Circuit.tick model.circuit }
+      let
+        dragProcessed =
+          case model.dragStart of
+            Nothing ->
+              model
+
+            Just dragStart ->
+               model |> pointingAction (pseudoMouseState dragStart)
+      in
+        { dragProcessed | circuit = Circuit.tick dragProcessed.circuit }
 
     TabClicked tab ->
       if tab == model.tab then
@@ -157,7 +154,10 @@ update_ msg model =
       else
         case tab of
           EditorTab ->
-            { model | tab = tab }
+            { model
+            | tab = tab
+            , speed = Pose
+            }
 
           SimulatorTab ->
             { model
@@ -175,6 +175,38 @@ update_ msg model =
 
     Pan direction ->
       model |> pan direction
+
+pointingAction : MouseState -> Model -> Model
+pointingAction mouse model =
+  let
+    ( offsetX, offsetY ) = model.offset
+
+    target =
+      ( floor mouse.x // model.zoom + offsetX
+      , floor mouse.y // model.zoom + offsetY
+      )
+  in
+    case model.tab of
+      EditorTab ->
+        let
+          blueprint =
+            case model.tool of
+              Drawer element ->
+                model.blueprint
+                  |> Blueprint.put target element
+              Eraser ->
+                model.blueprint
+                  |> Blueprint.remove target
+        in
+          { model | blueprint = blueprint }
+
+      SimulatorTab ->
+        let
+          circuit =
+            model.circuit
+              |> Circuit.push target
+        in
+          { model | circuit = circuit }
 
 type Direction
   = Up
@@ -406,6 +438,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
   let
     mouse = mouseUp (\_ -> MouseUpOutsideElm)
+
     autoTick =
       case model.speed of
         Pose -> Sub.none
@@ -427,6 +460,10 @@ type alias MouseState =
   , dx : Float
   , dy : Float
   }
+
+pseudoMouseState : ( Float, Float ) -> MouseState
+pseudoMouseState ( x, y ) =
+  MouseState x y 0.0 0.0
 
 mouseDecoder : Json.Decoder MouseState
 mouseDecoder =
