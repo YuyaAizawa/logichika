@@ -1,4 +1,4 @@
-# Logpe
+# LogiChika
 
 ![demo image](demo.gif)
 
